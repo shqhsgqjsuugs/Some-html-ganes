@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>是男人就下一万层 - 修正版</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            background-color: #222;
+            color: white;
+        }
+        #game-container {
+            position: relative;
+            width: 400px;
+            height: 600px;
+            margin: 20px auto;
+            background-color: #333;
+            overflow: hidden;
+        }
+        #player {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            background-color: #4CAF50;
+            border-radius: 50%;
+            z-index: 10;
+            transition: transform 0.1s;
+        }
+        .platform {
+            position: absolute;
+            height: 15px;
+            border-radius: 5px;
+        }
+        .platform-normal {
+            background-color: #8BC34A;
+        }
+        .platform-temporary {
+            background-color: #FFC107;
+            animation: blink 1s infinite;
+        }
+        .platform-spring {
+            background-color: #00BCD4;
+            background-image: 
+                linear-gradient(45deg, rgba(255,255,255,0.3) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.3) 50%, rgba(255,255,255,0.3) 75%, transparent 75%, transparent);
+            background-size: 20px 20px;
+        }
+        @keyframes blink {
+            0% { opacity: 0.7; }
+            50% { opacity: 1; }
+            100% { opacity: 0.7; }
+        }
+        .spikes {
+            position: absolute;
+            width: 100%;
+            height: 30px;
+            background-color: #f44336;
+            background-image: repeating-linear-gradient(
+                45deg,
+                transparent,
+                transparent 10px,
+                rgba(0,0,0,0.3) 10px,
+                rgba(0,0,0,0.3) 20px
+            );
+            z-index: 5;
+        }
+        #score-display {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 20px;
+            z-index: 20;
+        }
+        #spikes-distance {
+            position: absolute;
+            top: 40px;
+            left: 10px;
+            font-size: 16px;
+            z-index: 20;
+            color: #FF9800;
+        }
+        #game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            display: none;
+            z-index: 30;
+        }
+        #restart-btn {
+            margin-top: 15px;
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #instructions {
+            text-align: center;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="player"></div>
+        <div id="score-display">层数: 0</div>
+        <div id="spikes-distance">钉板距离: 0</div>
+        <div class="spikes"></div>
+        <div id="game-over">
+            <h2>游戏结束!</h2>
+            <p>你的最终成绩: <span id="final-score">0</span> 层</p>
+            <button id="restart-btn">重新开始</button>
+        </div>
+    </div>
+    <div id="instructions">
+        使用左右方向键移动，控制下落速度<br>
+        太快会掉出屏幕，太慢会被钉板追上<br>
+        黄色平台会消失，蓝色平台会弹跳
+    </div>
+
+    <script>
+        // 游戏变量
+        const gameContainer = document.getElementById('game-container');
+        const player = document.getElementById('player');
+        const scoreDisplay = document.getElementById('score-display');
+        const spikesDistanceDisplay = document.getElementById('spikes-distance');
+        const gameOverScreen = document.getElementById('game-over');
+        const finalScoreDisplay = document.getElementById('final-score');
+        const restartBtn = document.getElementById('restart-btn');
+        const spikes = document.querySelector('.spikes');
+        
+        const containerWidth = gameContainer.offsetWidth;
+        const containerHeight = gameContainer.offsetHeight;
+        
+        let playerX = containerWidth / 2 - 15;
+        let playerY = containerHeight * 0.7;
+        let playerSpeed = 5;
+        let isMovingLeft = false;
+        let isMovingRight = false;
+        let platforms = [];
+        let spikesY = -30;
+        let spikesSpeed = 1.5;
+        const maxSpikesSpeed = 3.5;
+        let score = 0;
+        let gameRunning = true;
+        let platformGap = 120; // 平台间距设为120
+        let lowestPlatformY = containerHeight * 0.7 + 120;
+        let cameraOffset = 0;
+        let gravity = 0.5;
+        let playerVelocityY = 0;
+        let cameraFollowSpeed = 0.05;
+        const preloadDistance = 1200;
+        
+        // 平台类型常量
+        const PLATFORM_TYPES = {
+            NORMAL: 'normal',
+            TEMPORARY: 'temporary',
+            SPRING: 'spring'
+        };
+        
+        // 初始化游戏
+        function initGame() {
+            // 重置变量
+            playerX = containerWidth / 2 - 15;
+            playerY = containerHeight * 0.7;
+            playerVelocityY = 0;
+            platforms = [];
+            spikesY = -30;
+            spikesSpeed = 1.5;
+            score = 0;
+            gameRunning = true;
+            platformGap = 120;
+            lowestPlatformY = containerHeight * 0.7 + 120;
+            cameraOffset = 0;
+            
+            // 清除所有平台
+            document.querySelectorAll('.platform').forEach(el => el.remove());
+            
+            // 重置钉板位置
+            spikes.style.top = `${spikesY - cameraOffset}px`;
+            
+            // 创建初始平台
+            createInitialPlatforms();
+            
+            // 更新显示
+            updatePlayerPosition();
+            scoreDisplay.textContent = `层数: ${score}`;
+            updateSpikesDistance();
+            gameOverScreen.style.display = 'none';
+            
+            // 开始游戏循环
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // 创建初始平台
+        function createInitialPlatforms() {
+            // 在玩家正下方创建安全的初始平台
+            createPlatform(playerY + 50, PLATFORM_TYPES.NORMAL);
+            
+            // 预加载大量平台
+            for (let y = playerY + 50 + platformGap; y < containerHeight * 0.7 + preloadDistance; y += platformGap) {
+                createPlatform(y);
+            }
+            lowestPlatformY = containerHeight * 0.7 + preloadDistance - platformGap;
+        }
+        
+        // 创建平台
+        function createPlatform(y, forceType = null) {
+            const platform = document.createElement('div');
+            
+            // 随机决定平台类型
+            let type = forceType;
+            if (!type) {
+                const rand = Math.random();
+                if (rand < 0.7) {
+                    type = PLATFORM_TYPES.NORMAL;
+                } else if (rand < 0.9) {
+                    type = PLATFORM_TYPES.TEMPORARY;
+                } else {
+                    type = PLATFORM_TYPES.SPRING;
+                }
+            }
+            
+            platform.className = `platform platform-${type}`;
+            
+            const width = 80 + Math.random() * 60;
+            const x = Math.random() * (containerWidth - width);
+            
+            platform.style.width = `${width}px`;
+            platform.style.left = `${x}px`;
+            platform.style.top = `${y - cameraOffset}px`;
+            
+            gameContainer.appendChild(platform);
+            
+            const platformObj = {
+                element: platform,
+                x: x,
+                y: y,
+                width: width,
+                type: type,
+                timer: null,
+                used: false
+            };
+            
+            platforms.push(platformObj);
+            
+            return platformObj;
+        }
+        
+        // 更新玩家位置
+        function updatePlayerPosition() {
+            player.style.left = `${playerX}px`;
+            player.style.top = `${playerY - cameraOffset}px`;
+        }
+        
+        // 更新钉板距离显示
+        function updateSpikesDistance() {
+            const distance = Math.max(0, Math.floor(spikesY - playerY + 30));
+            spikesDistanceDisplay.textContent = `钉板距离: ${distance}`;
+        }
+        
+        // 游戏主循环
+        function gameLoop() {
+            if (!gameRunning) return;
+            
+            // 移动玩家
+            if (isMovingLeft && playerX > 0) {
+                playerX -= playerSpeed;
+            }
+            if (isMovingRight && playerX < containerWidth - 30) {
+                playerX += playerSpeed;
+            }
+            
+            // 物理系统 - 下落速度
+            playerVelocityY += gravity;
+            playerY += playerVelocityY;
+            
+            // 更新钉板距离显示
+            updateSpikesDistance();
+            
+            // 检查平台碰撞
+            let onPlatform = false;
+            for (let i = 0; i < platforms.length; i++) {
+                const platform = platforms[i];
+                
+                if (
+                    playerY + 30 >= platform.y &&
+                    playerY + 30 <= platform.y + 15 &&
+                    playerX + 15 >= platform.x &&
+                    playerX <= platform.x + platform.width
+                ) {
+                    if (playerVelocityY > 0) {
+                        onPlatform = true;
+                        playerVelocityY = 0;
+                        
+                        if (platform.type === PLATFORM_TYPES.NORMAL) {
+                            playerY = platform.y - 30;
+                        } 
+                        else if (platform.type === PLATFORM_TYPES.TEMPORARY && !platform.used) {
+                            playerY = platform.y - 30;
+                            platform.used = true;
+                            
+                            if (!platform.timer) {
+                                platform.timer = setTimeout(() => {
+                                    platform.element.style.opacity = '0.5';
+                                    setTimeout(() => {
+                                        const index = platforms.indexOf(platform);
+                                        if (index !== -1) {
+                                            platforms.splice(index, 1);
+                                            gameContainer.removeChild(platform.element);
+                                        }
+                                    }, 300);
+                                }, 1000);
+                            }
+                        }
+                        else if (platform.type === PLATFORM_TYPES.SPRING) {
+                            playerY = platform.y - 30;
+                            playerVelocityY = -15;
+                            player.style.transform = 'scale(1.2)';
+                            setTimeout(() => {
+                                player.style.transform = 'scale(1)';
+                            }, 200);
+                        }
+                    }
+                    break;
+                }
+            }
+            
+            // 钉板移动
+            spikesY += spikesSpeed;
+            spikes.style.top = `${spikesY - cameraOffset}px`;
+            
+            // 镜头跟随
+            if (playerY - cameraOffset > containerHeight * 0.5) {
+                const offset = playerY - cameraOffset - containerHeight * 0.5;
+                cameraOffset += offset * cameraFollowSpeed;
+                
+                platforms.forEach(p => {
+                    p.element.style.top = `${p.y - cameraOffset}px`;
+                });
+                spikes.style.top = `${spikesY - cameraOffset}px`;
+                
+                score += Math.floor(offset / 10);
+                scoreDisplay.textContent = `层数: ${score}`;
+            }
+            
+            // 检查死亡条件
+            if (playerY < spikesY + 30) {
+                gameOver("被钉板追上了!");
+                return;
+            }
+            if (playerY - cameraOffset > containerHeight + 50) {
+                gameOver("掉出屏幕了!");
+                return;
+            }
+            
+            // 持续预加载平台
+            while (lowestPlatformY < cameraOffset + containerHeight + preloadDistance) {
+                const newPlatform = createPlatform(lowestPlatformY + platformGap);
+                if (newPlatform) {
+                    lowestPlatformY += platformGap;
+                } else {
+                    break;
+                }
+            }
+            
+            // 移除屏幕外的平台
+            platforms = platforms.filter(platform => {
+                if (platform.y - cameraOffset < -50) {
+                    if (platform.timer) clearTimeout(platform.timer);
+                    gameContainer.removeChild(platform.element);
+                    return false;
+                }
+                return true;
+            });
+            
+            // 随着分数增加难度
+            spikesSpeed = Math.min(1.5 + Math.floor(score / 100) * 0.15, maxSpikesSpeed);
+            platformGap = Math.max(120 - Math.floor(score / 200) * 5, 80);
+            
+            updatePlayerPosition();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // 游戏结束
+        function gameOver(reason) {
+            gameRunning = false;
+            finalScoreDisplay.textContent = score + " (" + reason + ")";
+            gameOverScreen.style.display = 'block';
+        }
+        
+        // 事件监听
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft') {
+                isMovingLeft = true;
+            } else if (e.key === 'ArrowRight') {
+                isMovingRight = true;
+            }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowLeft') {
+                isMovingLeft = false;
+            } else if (e.key === 'ArrowRight') {
+                isMovingRight = false;
+            }
+        });
+        
+        restartBtn.addEventListener('click', initGame);
+        
+        // 开始游戏
+        initGame();
+    </script>
+</body>
+</html>

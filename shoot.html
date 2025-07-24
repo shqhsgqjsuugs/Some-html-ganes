@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>2D射击闯关游戏 - 带无敌时间</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #222;
+            font-family: Arial, sans-serif;
+        }
+        #gameCanvas {
+            display: block;
+            background-color: #333;
+            margin: 0 auto;
+        }
+        #gameUI {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 18px;
+        }
+        #startScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+        }
+        #startButton {
+            padding: 10px 20px;
+            font-size: 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #levelComplete {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="gameUI">
+        <div>生命: <span id="health">20</span></div>
+        <div>分数: <span id="score">0</span></div>
+        <div>关卡: <span id="level">1</span></div>
+        <div>弹药: <span id="ammo">30</span>/30</div>
+        <div id="invincibleStatus" style="color: #f1c40f; display: none;">无敌中</div>
+    </div>
+    
+    <div id="startScreen">
+        <h1>2D射击闯关游戏</h1>
+        <p>使用WASD移动，鼠标瞄准并点击射击</p>
+        <p>被敌人击中后有短暂无敌时间</p>
+        <button id="startButton">开始游戏</button>
+    </div>
+    
+    <div id="levelComplete">
+        <h1>关卡完成!</h1>
+        <p>准备进入下一关...</p>
+    </div>
+
+    <script>
+        // 游戏变量
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const startScreen = document.getElementById('startScreen');
+        const startButton = document.getElementById('startButton');
+        const levelCompleteScreen = document.getElementById('levelComplete');
+        const healthDisplay = document.getElementById('health');
+        const scoreDisplay = document.getElementById('score');
+        const levelDisplay = document.getElementById('level');
+        const ammoDisplay = document.getElementById('ammo');
+        const invincibleStatus = document.getElementById('invincibleStatus');
+        
+        // 设置画布大小
+        canvas.width = 800;
+        canvas.height = 600;
+        
+        // 游戏状态
+        let gameRunning = false;
+        let levelComplete = false;
+        let currentLevel = 1;
+        let score = 0;
+        let health = 20;
+        let ammo = 30;
+        let maxAmmo = 30;
+        let reloading = false;
+        
+        // 无敌时间相关变量
+        let isInvincible = false;
+        let invincibleTimer = 0;
+        const INVINCIBLE_DURATION = 2000; // 2秒无敌时间
+        let playerVisible = true;
+        let blinkTimer = 0;
+        const BLINK_INTERVAL = 100; // 闪烁间隔
+        
+        // 玩家
+        const player = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            radius: 20,
+            speed: 5,
+            color: '#3498db',
+            dx: 0,
+            dy: 0
+        };
+        
+        // 子弹数组
+        let bullets = [];
+        
+        // 敌人数组
+        let enemies = [];
+        
+        // 障碍物数组
+        let obstacles = [];
+        
+        // 控制状态
+        const keys = {
+            w: false,
+            a: false,
+            s: false,
+            d: false
+        };
+        
+        // 鼠标位置
+        let mouse = {
+            x: 0,
+            y: 0
+        };
+        
+        // 初始化游戏
+        function initGame() {
+            gameRunning = true;
+            startScreen.style.display = 'none';
+            levelCompleteScreen.style.display = 'none';
+            health = 20;
+            score = 0;
+            currentLevel = 1;
+            ammo = maxAmmo;
+            reloading = false;
+            isInvincible = false;
+            invincibleTimer = 0;
+            playerVisible = true;
+            invincibleStatus.style.display = 'none';
+            
+            // 初始化玩家位置
+            player.x = canvas.width / 2;
+            player.y = canvas.height / 2;
+            
+            // 清空数组
+            bullets = [];
+            enemies = [];
+            obstacles = [];
+            
+            // 设置关卡
+            setupLevel(currentLevel);
+            
+            // 开始游戏循环
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // 设置关卡
+        function setupLevel(level) {
+            levelDisplay.textContent = level;
+            
+            // 根据关卡增加难度
+            const enemyCount = 3 + level * 2;
+            const obstacleCount = level;
+            
+            // 创建敌人
+            for (let i = 0; i < enemyCount; i++) {
+                createEnemy();
+            }
+            
+            // 创建障碍物
+            for (let i = 0; i < obstacleCount; i++) {
+                createObstacle();
+            }
+        }
+        
+        // 创建敌人
+        function createEnemy() {
+            // 确保敌人不会生成在玩家附近
+            let x, y;
+            do {
+                x = Math.random() * (canvas.width - 40) + 20;
+                y = Math.random() * (canvas.height - 40) + 20;
+            } while (Math.sqrt((x - player.x) ** 2 + (y - player.y) ** 2) < 150);
+            
+            enemies.push({
+                x: x,
+                y: y,
+                radius: 15,
+                speed: 1 + Math.random() * currentLevel * 0.3,
+                color: '#e74c3c',
+                health: 1 + Math.floor(currentLevel / 3)
+            });
+        }
+        
+        // 创建障碍物
+        function createObstacle() {
+            obstacles.push({
+                x: Math.random() * (canvas.width - 100) + 50,
+                y: Math.random() * (canvas.height - 100) + 50,
+                width: 50 + Math.random() * 50,
+                height: 50 + Math.random() * 50,
+                color: '#7f8c8d'
+            });
+        }
+        
+        // 游戏循环
+        function gameLoop(timestamp) {
+            if (!gameRunning) return;
+            
+            // 清除画布
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // 更新游戏状态
+            update(timestamp);
+            
+            // 绘制游戏元素
+            draw();
+            
+            // 检查关卡是否完成
+            if (enemies.length === 0 && !levelComplete) {
+                levelComplete = true;
+                levelCompleteScreen.style.display = 'flex';
+                setTimeout(() => {
+                    levelComplete = false;
+                    currentLevel++;
+                    ammo = maxAmmo;
+                    ammoDisplay.textContent = ammo;
+                    setupLevel(currentLevel);
+                    levelCompleteScreen.style.display = 'none';
+                }, 2000);
+            }
+            
+            // 继续游戏循环
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // 更新游戏状态
+        function update(timestamp) {
+            // 更新无敌状态
+            updateInvincibleState(timestamp);
+            
+            // 更新玩家位置
+            updatePlayer();
+            
+            // 更新子弹
+            updateBullets();
+            
+            // 更新敌人
+            updateEnemies();
+            
+            // 自动装弹
+            if (ammo <= 0 && !reloading) {
+                reloading = true;
+                setTimeout(() => {
+                    ammo = maxAmmo;
+                    ammoDisplay.textContent = ammo;
+                    reloading = false;
+                }, 1000);
+            }
+        }
+        
+        // 更新无敌状态
+        function updateInvincibleState(timestamp) {
+            if (isInvincible) {
+                // 检查无敌时间是否结束
+                if (timestamp - invincibleTimer >= INVINCIBLE_DURATION) {
+                    isInvincible = false;
+                    playerVisible = true;
+                    invincibleStatus.style.display = 'none';
+                } else {
+                    // 闪烁效果
+                    if (timestamp - blinkTimer >= BLINK_INTERVAL) {
+                        playerVisible = !playerVisible;
+                        blinkTimer = timestamp;
+                    }
+                }
+            }
+        }
+        
+        // 更新玩家位置
+        function updatePlayer() {
+            player.dx = 0;
+            player.dy = 0;
+            
+            if (keys.w) player.dy = -player.speed;
+            if (keys.s) player.dy = player.speed;
+            if (keys.a) player.dx = -player.speed;
+            if (keys.d) player.dx = player.speed;
+            
+            // 对角线移动速度修正
+            if (player.dx !== 0 && player.dy !== 0) {
+                player.dx *= 0.7071;
+                player.dy *= 0.7071;
+            }
+            
+            // 计算新位置
+            const newX = player.x + player.dx;
+            const newY = player.y + player.dy;
+            
+            // 检查边界碰撞
+            if (newX - player.radius > 0 && newX + player.radius < canvas.width) {
+                player.x = newX;
+            }
+            if (newY - player.radius > 0 && newY + player.radius < canvas.height) {
+                player.y = newY;
+            }
+            
+            // 检查障碍物碰撞
+            for (const obstacle of obstacles) {
+                if (
+                    newX + player.radius > obstacle.x &&
+                    newX - player.radius < obstacle.x + obstacle.width &&
+                    newY + player.radius > obstacle.y &&
+                    newY - player.radius < obstacle.y + obstacle.height
+                ) {
+                    // 碰撞发生，不更新位置
+                    return;
+                }
+            }
+            
+            // 没有碰撞，更新位置
+            player.x = newX;
+            player.y = newY;
+        }
+        
+        // 更新子弹
+        function updateBullets() {
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const bullet = bullets[i];
+                
+                // 移动子弹
+                bullet.x += bullet.dx * bullet.speed;
+                bullet.y += bullet.dy * bullet.speed;
+                
+                // 检查子弹是否超出边界
+                if (
+                    bullet.x < 0 ||
+                    bullet.x > canvas.width ||
+                    bullet.y < 0 ||
+                    bullet.y > canvas.height
+                ) {
+                    bullets.splice(i, 1);
+                    continue;
+                }
+                
+                // 检查子弹与障碍物碰撞
+                let hitObstacle = false;
+                for (const obstacle of obstacles) {
+                    if (
+                        bullet.x > obstacle.x &&
+                        bullet.x < obstacle.x + obstacle.width &&
+                        bullet.y > obstacle.y &&
+                        bullet.y < obstacle.y + obstacle.height
+                    ) {
+                        bullets.splice(i, 1);
+                        hitObstacle = true;
+                        break;
+                    }
+                }
+                if (hitObstacle) continue;
+                
+                // 检查子弹与敌人碰撞
+                for (let j = enemies.length - 1; j >= 0; j--) {
+                    const enemy = enemies[j];
+                    const distance = Math.sqrt(
+                        (bullet.x - enemy.x) ** 2 + (bullet.y - enemy.y) ** 2
+                    );
+                    
+                    if (distance < enemy.radius + bullet.radius) {
+                        // 击中敌人
+                        enemy.health--;
+                        
+                        if (enemy.health <= 0) {
+                            // 敌人死亡
+                            enemies.splice(j, 1);
+                            score += 10 * currentLevel;
+                            scoreDisplay.textContent = score;
+                            
+                            // 有几率掉落弹药
+                            if (Math.random() < 0.3) {
+                                ammo = Math.min(maxAmmo, ammo + 10);
+                                ammoDisplay.textContent = ammo;
+                            }
+                        }
+                        
+                        bullets.splice(i, 1);
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // 更新敌人
+        function updateEnemies() {
+            for (const enemy of enemies) {
+                // 简单AI：向玩家移动
+                const angle = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+                enemy.x += Math.cos(angle) * enemy.speed;
+                enemy.y += Math.sin(angle) * enemy.speed;
+                
+                // 检查敌人与玩家碰撞
+                const distance = Math.sqrt(
+                    (player.x - enemy.x) ** 2 + (player.y - enemy.y) ** 2
+                );
+                
+                if (distance < player.radius + enemy.radius && !isInvincible) {
+                    // 玩家受伤
+                    health -= 1;
+                    healthDisplay.textContent = health;
+                    
+                    // 激活无敌时间
+                    activateInvincibility();
+                    
+                    if (health <= 0) {
+                        gameOver();
+                    }
+                }
+                
+                // 检查敌人与障碍物碰撞 (简化版)
+                for (const obstacle of obstacles) {
+                    // 检查敌人是否在障碍物内
+                    if (
+                        enemy.x > obstacle.x &&
+                        enemy.x < obstacle.x + obstacle.width &&
+                        enemy.y > obstacle.y &&
+                        enemy.y < obstacle.y + obstacle.height
+                    ) {
+                        // 简单处理：将敌人推出障碍物
+                        const obstacleCenterX = obstacle.x + obstacle.width / 2;
+                        const obstacleCenterY = obstacle.y + obstacle.height / 2;
+                        const angle = Math.atan2(
+                            enemy.y - obstacleCenterY,
+                            enemy.x - obstacleCenterX
+                        );
+                        
+                        enemy.x = obstacleCenterX + Math.cos(angle) * (obstacle.width / 2 + enemy.radius);
+                        enemy.y = obstacleCenterY + Math.sin(angle) * (obstacle.height / 2 + enemy.radius);
+                    }
+                }
+            }
+        }
+        
+        // 激活无敌时间
+        function activateInvincibility() {
+            isInvincible = true;
+            invincibleTimer = performance.now();
+            blinkTimer = performance.now();
+            playerVisible = true;
+            invincibleStatus.style.display = 'block';
+        }
+        
+        // 绘制游戏元素
+        function draw() {
+            // 绘制障碍物
+            for (const obstacle of obstacles) {
+                ctx.fillStyle = obstacle.color;
+                ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+            }
+            
+            // 绘制敌人
+            for (const enemy of enemies) {
+                ctx.beginPath();
+                ctx.arc(enemy.x, enemy.y, enemy.radius, 0, Math.PI * 2);
+                ctx.fillStyle = enemy.color;
+                ctx.fill();
+                ctx.closePath();
+                
+                // 绘制敌人血条
+                if (enemy.health > 1) {
+                    ctx.fillStyle = 'black';
+                    ctx.fillRect(enemy.x - enemy.radius, enemy.y - enemy.radius - 10, enemy.radius * 2, 5);
+                    ctx.fillStyle = 'green';
+                    ctx.fillRect(
+                        enemy.x - enemy.radius,
+                        enemy.y - enemy.radius - 10,
+                        (enemy.radius * 2) * (enemy.health / (1 + Math.floor(currentLevel / 3))),
+                        5
+                    );
+                }
+            }
+            
+            // 绘制子弹
+            for (const bullet of bullets) {
+                ctx.beginPath();
+                ctx.arc(bullet.x, bullet.y, bullet.radius, 0, Math.PI * 2);
+                ctx.fillStyle = bullet.color;
+                ctx.fill();
+                ctx.closePath();
+            }
+            
+            // 绘制玩家 (如果可见)
+            if (playerVisible || !isInvincible) {
+                ctx.beginPath();
+                ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+                ctx.fillStyle = isInvincible ? '#f1c40f' : player.color; // 无敌时变色
+                ctx.fill();
+                ctx.closePath();
+                
+                // 绘制玩家朝向指示器
+                const angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
+                const indicatorX = player.x + Math.cos(angle) * (player.radius + 10);
+                const indicatorY = player.y + Math.sin(angle) * (player.radius + 10);
+                
+                ctx.beginPath();
+                ctx.arc(indicatorX, indicatorY, 5, 0, Math.PI * 2);
+                ctx.fillStyle = 'white';
+                ctx.fill();
+                ctx.closePath();
+            }
+            
+            // 绘制装弹提示
+            if (reloading) {
+                ctx.fillStyle = 'white';
+                ctx.font = '20px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('装弹中...', canvas.width / 2, canvas.height - 30);
+                ctx.textAlign = 'left';
+            }
+        }
+        
+        // 发射子弹
+        function shoot() {
+            if (ammo <= 0 || reloading) return;
+            
+            ammo--;
+            ammoDisplay.textContent = ammo;
+            
+            const angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
+            
+            bullets.push({
+                x: player.x + Math.cos(angle) * (player.radius + 5),
+                y: player.y + Math.sin(angle) * (player.radius + 5),
+                dx: Math.cos(angle),
+                dy: Math.sin(angle),
+                speed: 10,
+                radius: 5,
+                color: '#f1c40f'
+            });
+        }
+        
+        // 游戏结束
+        function gameOver() {
+            gameRunning = false;
+            startScreen.style.display = 'flex';
+            startButton.textContent = '重新开始';
+        }
+        
+        // 事件监听
+        startButton.addEventListener('click', initGame);
+        
+        window.addEventListener('keydown', (e) => {
+            if (e.key.toLowerCase() === 'w') keys.w = true;
+            if (e.key.toLowerCase() === 'a') keys.a = true;
+            if (e.key.toLowerCase() === 's') keys.s = true;
+            if (e.key.toLowerCase() === 'd') keys.d = true;
+            if (e.key === 'r' && !reloading) {
+                reloading = true;
+                setTimeout(() => {
+                    ammo = maxAmmo;
+                    ammoDisplay.textContent = ammo;
+                    reloading = false;
+                }, 1000);
+            }
+        });
+        
+        window.addEventListener('keyup', (e) => {
+            if (e.key.toLowerCase() === 'w') keys.w = false;
+            if (e.key.toLowerCase() === 'a') keys.a = false;
+            if (e.key.toLowerCase() === 's') keys.s = false;
+            if (e.key.toLowerCase() === 'd') keys.d = false;
+        });
+        
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mouse.x = e.clientX - rect.left;
+            mouse.y = e.clientY - rect.top;
+        });
+        
+        canvas.addEventListener('click', () => {
+            if (gameRunning) shoot();
+        });
+    </script>
+</body>
+</html>

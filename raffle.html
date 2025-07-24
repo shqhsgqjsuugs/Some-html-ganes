@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>魔幻随机事件抽奖系统</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            background-color: #f0f5ff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            color: #333;
+        }
+        .container {
+            background-color: white;
+            border-radius: 15px;
+            box-shadow: 0 0 25px rgba(70, 130, 180, 0.2);
+            padding: 30px;
+            width: 90%;
+            max-width: 800px;
+            text-align: center;
+        }
+        h1 {
+            color: #4682b4;
+            margin-bottom: 30px;
+            font-size: 28px;
+            text-shadow: 1px 1px 3px rgba(0,0,0,0.1);
+        }
+        .mode-selector {
+            margin-bottom: 25px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+        }
+        .mode-btn {
+            background-color: #87cefa;
+            color: #2c3e50;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 15px;
+            transition: all 0.3s;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .mode-btn.active {
+            background-color: #4682b4;
+            color: white;
+            transform: scale(1.05);
+            box-shadow: 0 3px 8px rgba(0,0,0,0.2);
+        }
+        .result-area {
+            min-height: 180px;
+            margin: 25px 0;
+            padding: 25px;
+            border: 3px dashed #4682b4;
+            border-radius: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background-color: #f8fbff;
+            font-size: 20px;
+            line-height: 1.6;
+            text-align: center;
+        }
+        .controls {
+            margin: 25px 0;
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+        }
+        .draw-btn {
+            background-color: #4682b4;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 30px;
+            cursor: pointer;
+            font-size: 18px;
+            transition: all 0.3s;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.2);
+        }
+        .draw-btn:hover {
+            background-color: #5f9ea0;
+            transform: scale(1.05);
+        }
+        .history {
+            margin-top: 30px;
+            text-align: left;
+            width: 100%;
+        }
+        .history h3 {
+            color: #4682b4;
+            border-bottom: 2px solid #4682b4;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+        }
+        .history-list {
+            max-height: 250px;
+            overflow-y: auto;
+            padding: 15px;
+            background-color: #f8fbff;
+            border-radius: 10px;
+            box-shadow: inset 0 0 8px rgba(0,0,0,0.1);
+        }
+        .history-item {
+            padding: 12px 0;
+            border-bottom: 1px dotted #b0c4de;
+        }
+        .history-item:last-child {
+            border-bottom: none;
+        }
+        .animation {
+            animation: pulse 0.4s infinite alternate;
+        }
+        @keyframes pulse {
+            from { opacity: 0.9; transform: scale(0.99); }
+            to { opacity: 1; transform: scale(1.01); }
+        }
+        .category-tag {
+            display: inline-block;
+            background-color: #e1f0fa;
+            color: #2c3e50;
+            padding: 4px 10px;
+            border-radius: 15px;
+            font-size: 13px;
+            margin: 5px 0;
+            font-weight: bold;
+        }
+        .result-text {
+            margin: 10px 0;
+            font-size: 20px;
+        }
+        .result-type {
+            font-size: 16px;
+            color: #5f9ea0;
+            margin-bottom: 10px;
+        }
+        .icon {
+            font-size: 24px;
+            margin: 0 5px;
+        }
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #b0c4de;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #4682b4;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>✨ 魔幻随机事件 & 世界观抽奖系统 ✨</h1>
+        
+        <div class="mode-selector">
+            <button class="mode-btn active" data-mode="events">随机事件</button>
+            <button class="mode-btn" data-mode="worldviews">随机世界观</button>
+            <button class="mode-btn" data-mode="both">混合抽奖</button>
+            <button class="mode-btn" data-mode="funny">无厘头事件</button>
+            <button class="mode-btn" data-mode="awkward">社交尴尬</button>
+            <button class="mode-btn" data-mode="magic">生活魔幻</button>
+        </div>
+        
+        <div class="result-area" id="resultArea">
+            <div>请选择模式并点击开始</div>
+        </div>
+        
+        <div class="controls">
+            <button class="draw-btn" id="drawBtn">开始抽奖</button>
+            <button class="draw-btn" id="resetBtn">重置历史</button>
+        </div>
+        
+        <div class="history">
+            <h3>📜 抽奖历史记录 (最近20条)</h3>
+            <div class="history-list" id="historyList"></div>
+        </div>
+    </div>
+
+    <script>
+        // 预设数据 - 包含所有新添加的内容
+        const eventData = {
+            // 原有事件
+            daily: [
+                "在公园长椅上发现一本神秘日记",
+                "收到一封没有署名的情书",
+                "最喜欢的咖啡店今天推出奇怪的新口味",
+                "发现邻居家的猫会开冰箱",
+                "手机自动播放一首你从未听过的歌"
+            ],
+            fantasy: [
+                "获得能听懂动物语言的能力，持续24小时",
+                "发现衣柜通向另一个世界",
+                "月亮变成方形持续一晚",
+                "所有电子设备开始显示倒计时",
+                "获得一本能改变现实的笔记本(只能使用一次)"
+            ],
+            career: [
+                "收到梦想公司的面试邀请",
+                "被邀请参加行业顶尖会议",
+                "偶然结识能改变你职业生涯的贵人",
+                "获得一个海外工作机会",
+                "你的创意被公司高层采纳"
+            ],
+            
+            // 新添加的事件分类
+            funny: [
+                "一觉醒来，发现自己的头发变成了彩虹色",
+                "出门踩到香蕉皮，结果滑进了彩票店并中奖",
+                "养的仓鼠突然开始用你的电脑打游戏，还比你强",
+                "点外卖，外卖小哥穿着恐龙服送餐",
+                "打喷嚏时，隔壁邻居的狗也跟着'阿嚏'一声",
+                "手机自动把所有人的脸P成表情包，包括老板",
+                "家里的Wi-Fi名字突然变成'隔壁老王网络'",
+                "超市收银员坚持用'石头剪刀布'决定折扣",
+                "洗澡时，沐浴露瓶突然开口说话：'兄弟，搓背吗？'",
+                "养的仙人掌突然长出手臂，并开始比划'来啊，碰我啊'"
+            ],
+            
+            awkward: [
+                "在电梯里放了个屁，结果电梯AI说：'空气质量下降，已为您开启换气模式'",
+                "相亲对象带了一只羊驼赴约，并坚持让它先点菜",
+                "开会时，PPT自动播放你的童年丑照",
+                "老板发错群，把'好想辞职'发到了公司大群，结果全公司+1",
+                "陌生人突然递给你一根法棍，并说：'这是你的命运之杖'",
+                "在健身房跑步，跑步机突然播放《江南Style》并自动加速",
+                "点咖啡时，咖啡师说：'今天的隐藏菜单是社畜的眼泪，要试试吗？'",
+                "外卖订单备注'不要香菜'，结果收到一盒香菜和纸条'这是命运的安排'",
+                "去面试，HR突然问：'如果变成马桶，你会怎么形容自己？'",
+                "坐公交，司机突然说：'下一站，火星，请准备太空服'"
+            ],
+            
+            magic: [
+                "冰箱里的食物开始组队玩躲猫猫",
+                "养的鱼突然跳出鱼缸，并在地上写'我要自由'",
+                "家里的扫地机器人学会骂脏话",
+                "天气预报说今天会下'薯片雨'，结果真的下了",
+                "网购'隐身斗篷'，结果收到一件透明雨衣",
+                "睡觉时，床突然说：'兄弟，你该减肥了'",
+                "自动导航带你绕了10圈，最后说：'其实我只是想多陪陪你'",
+                "微波炉加热食物时，突然播放《舌尖上的中国》BGM",
+                "养的猫突然用你的账号直播，并收获10万粉丝",
+                "早上刷牙，牙膏挤出来是彩虹色，并附带纸条'今天会是神奇的一天'"
+            ]
+        };
+
+        const worldviewData = {
+            // 原有世界观
+            original: [
+                "这个世界所有情绪会凝结成彩色晶体",
+                "人类睡眠时会进入集体梦境空间",
+                "每个人的影子藏着第二人格",
+                "图书馆最深处的书能改写现实",
+                "雨水含有微量记忆修改物质"
+            ],
+            
+            // 新添加的世界观分类
+            fantasy: [
+                "每个满月夜人类会随机交换身体",
+                "城市上空漂浮着可居住的云岛群",
+                "所有谎言会具象化成气泡漂浮",
+                "书店里有本会自动续写命运的书",
+                "雨水能冲刷掉24小时内的记忆",
+                "地铁末班车通往梦境中转站",
+                "人类的情绪会生长成随身植物",
+                "废弃玩具在午夜会获得生命",
+                "世界的色彩饱和度随心情变化",
+                "存在专门回收遗憾的当铺"
+            ],
+            
+            scifi: [
+                "地球是高等文明的实验沙盒",
+                "所有科技产品有1%来自未来",
+                "大气层外有透明防护罩包裹",
+                "人类大脑可连接Wi-Fi网络",
+                "月球背面是全息投影伪装",
+                "已灭绝生物生活在第四维度",
+                "平行宇宙在镜面世界交汇",
+                "时间流速存在隐形调节阀",
+                "部分人类携带外星基因片段",
+                "全球网络由量子生物操控"
+            ],
+            
+            mystery: [
+                "每座桥下住着记忆吞噬者",
+                "午夜电台接收亡者来电",
+                "城市地底埋着巨型生物骨骼",
+                "所有肖像画会缓慢变化",
+                "雨伞能短暂隔绝物理规则",
+                "存在专门贩卖巧合的黑市",
+                "部分路灯是监视器伪装",
+                "报纸会提前刊载明日新闻",
+                "电梯按钮藏有隐藏楼层",
+                "二手物品附着前任主人灵魂"
+            ],
+            
+            heartwarming: [
+                "流星其实是宇宙邮差",
+                "蒲公英传播秘密愿望",
+                "彩虹尽头有礼物派发站",
+                "北极光能治愈心灵创伤",
+                "猫咪掌管天气调节权",
+                "云朵是天空的棉花糖厂",
+                "风铃实际是精灵门铃",
+                "萤火虫装载迷路指南针",
+                "海浪会唱摇篮曲",
+                "落叶组成大地密码"
+            ]
+        };
+
+        // 获取DOM元素
+        const resultArea = document.getElementById('resultArea');
+        const drawBtn = document.getElementById('drawBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const historyList = document.getElementById('historyList');
+        const modeBtns = document.querySelectorAll('.mode-btn');
+        
+        // 变量初始化
+        let currentMode = 'events';
+        let isDrawing = false;
+        let drawInterval = null;
+        let historyItems = [];
+        
+        // 模式切换
+        modeBtns.forEach(btn => {
+            btn.addEventListener('click', function() {
+                modeBtns.forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                currentMode = this.dataset.mode;
+                resetDraw();
+            });
+        });
+        
+        // 开始抽奖
+        drawBtn.addEventListener('click', function() {
+            if (isDrawing) {
+                stopDrawing();
+            } else {
+                startDrawing();
+            }
+        });
+        
+        // 重置历史
+        resetBtn.addEventListener('click', function() {
+            historyItems = [];
+            updateHistory();
+            resultArea.innerHTML = `<div>历史记录已重置，请点击开始抽奖</div>`;
+        });
+        
+        // 开始抽奖动画
+        function startDrawing() {
+            isDrawing = true;
+            drawBtn.textContent = '停止抽奖';
+            resultArea.classList.add('animation');
+            
+            // 快速切换显示不同结果
+            drawInterval = setInterval(() => {
+                const randomResult = getRandomResult();
+                displayResult(randomResult, false);
+            }, 100);
+        }
+        
+        // 停止抽奖并确定结果
+        function stopDrawing() {
+            isDrawing = false;
+            clearInterval(drawInterval);
+            drawBtn.textContent = '开始抽奖';
+            resultArea.classList.remove('animation');
+            
+            // 确定最终结果
+            const finalResult = getRandomResult();
+            displayResult(finalResult, true);
+            
+            // 添加到历史记录
+            historyItems.unshift({
+                text: finalResult.text,
+                type: finalResult.type,
+                category: finalResult.category,
+                time: new Date()
+            });
+            
+            // 只保留最近20条记录
+            if (historyItems.length > 20) {
+                historyItems = historyItems.slice(0, 20);
+            }
+            
+            updateHistory();
+        }
+        
+        // 重置抽奖状态
+        function resetDraw() {
+            if (isDrawing) {
+                stopDrawing();
+            }
+            resultArea.innerHTML = `<div>当前模式: ${getModeName(currentMode)}，点击按钮开始抽奖</div>`;
+        }
+        
+        // 获取随机结果
+        function getRandomResult() {
+            switch(currentMode) {
+                case 'events':
+                    return getRandomEvent('daily,fantasy,career');
+                case 'worldviews':
+                    return getRandomWorldview('original,fantasy,scifi,mystery,heartwarming');
+                case 'both':
+                    return Math.random() < 0.7 ? 
+                        getRandomEvent('daily,fantasy,career') : 
+                        getRandomWorldview('original,fantasy,scifi,mystery,heartwarming');
+                case 'funny':
+                    return getRandomEvent('funny');
+                case 'awkward':
+                    return getRandomEvent('awkward');
+                case 'magic':
+                    return getRandomEvent('magic');
+                default:
+                    return getRandomEvent('daily,fantasy,career');
+            }
+        }
+        
+        // 获取随机事件
+        function getRandomEvent(categories) {
+            const categoryList = categories.split(',');
+            let allEvents = [];
+            
+            categoryList.forEach(cat => {
+                allEvents = allEvents.concat(
+                    eventData[cat].map(e => ({
+                        text: e,
+                        category: getCategoryName(cat)
+                    }))
+                );
+            });
+            
+            const randomIndex = Math.floor(Math.random() * allEvents.length);
+            return {
+                text: allEvents[randomIndex].text,
+                type: 'event',
+                category: allEvents[randomIndex].category
+            };
+        }
+        
+        // 获取随机世界观
+        function getRandomWorldview(categories) {
+            const categoryList = categories.split(',');
+            let allWorldviews = [];
+            
+            categoryList.forEach(cat => {
+                allWorldviews = allWorldviews.concat(
+                    worldviewData[cat].map(w => ({
+                        text: w,
+                        category: getCategoryName(cat)
+                    }))
+                );
+            });
+            
+            const randomIndex = Math.floor(Math.random() * allWorldviews.length);
+            return {
+                text: allWorldviews[randomIndex].text,
+                type: 'worldview',
+                category: allWorldviews[randomIndex].category
+            };
+        }
+        
+        // 显示结果
+        function displayResult(result, isFinal) {
+            if (isFinal) {
+                const typeIcon = result.type === 'event' ? '🎲' : '🌍';
+                const typeText = result.type === 'event' ? '事件' : '世界观';
+                
+                resultArea.innerHTML = `
+                    <div class="result-type">${typeIcon} 抽中${typeText} · <span class="category-tag">${result.category}</span></div>
+                    <div class="result-text">${result.text}</div>
+                `;
+            } else {
+                // 抽奖过程中的快速切换显示
+                resultArea.innerHTML = `<div class="result-text">${result.text}</div>`;
+            }
+        }
+        
+        // 更新历史记录
+        function updateHistory() {
+            historyList.innerHTML = '';
+            
+            if (historyItems.length === 0) {
+                historyList.innerHTML = '<div style="text-align: center; color: #888;">暂无历史记录</div>';
+                return;
+            }
+            
+            historyItems.forEach((item, index) => {
+                const historyItem = document.createElement('div');
+                historyItem.className = 'history-item';
+                
+                const timeStr = item.time.toLocaleTimeString();
+                const typeIcon = item.type === 'event' ? '🎲' : '🌍';
+                
+                historyItem.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <small style="color: #666;">${timeStr}</small>
+                            <span class="category-tag" style="margin-left: 8px;">${item.category}</span>
+                        </div>
+                        <div style="font-size: 18px;">${typeIcon}</div>
+                    </div>
+                    <div style="margin-top: 5px;">${item.text}</div>
+                `;
+                historyList.appendChild(historyItem);
+            });
+        }
+        
+        // 获取模式名称
+        function getModeName(mode) {
+            const modeNames = {
+                'events': '随机事件',
+                'worldviews': '随机世界观',
+                'both': '混合抽奖',
+                'funny': '无厘头事件',
+                'awkward': '社交尴尬',
+                'magic': '生活魔幻'
+            };
+            return modeNames[mode] || mode;
+        }
+        
+        // 获取分类名称
+        function getCategoryName(category) {
+            const categoryNames = {
+                'daily': '日常生活',
+                'fantasy': '奇幻冒险',
+                'career': '职业发展',
+                'funny': '无厘头',
+                'awkward': '社交尴尬',
+                'magic': '生活魔幻',
+                'original': '经典世界观',
+                'scifi': '科幻世界观',
+                'mystery': '悬疑世界观',
+                'heartwarming': '温馨世界观'
+            };
+            return categoryNames[category] || category;
+        }
+    </script>
+</body>
+</html>
