@@ -1,0 +1,19 @@
+{
+  "name": "BOSS战斗竞技场",
+  "description": "最终BOSS战的大型竞技场",
+  "mapSize": [1200, 500],
+  "platforms": [
+    {"x": 0, "y": 460, "width": 400, "height": 40},
+    {"x": 800, "y": 460, "width": 400, "height": 40},
+    {"x": 400, "y": 360, "width": 400, "height": 20},
+    {"x": 200, "y": 260, "width": 200, "height": 20},
+    {"x": 800, "y": 260, "width": 200, "height": 20},
+    {"x": 500, "y": 160, "width": 200, "height": 20}
+  ],
+  "enemies": [
+    {"x": 600, "y": 140, "health": 10, "speed": 1.5, "width": 60, "height": 60},
+    {"x": 300, "y": 460, "health": 2},
+    {"x": 900, "y": 460, "health": 2}
+  ],
+  "boss": true
+}

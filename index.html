@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>马里奥射击版</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #6b8cff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Arial', sans-serif;
+        }
+        
+        #gameContainer {
+            position: relative;
+        }
+        
+        #gameCanvas {
+            border: 4px solid #333;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            background: linear-gradient(to bottom, #6b8cff, #87CEEB);
+            image-rendering: pixelated;
+        }
+        
+        #startScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+        }
+        
+        #startButton, #loadMapButton {
+            padding: 10px 30px;
+            font-size: 24px;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        
+        #startButton {
+            background: #e74c3c;
+        }
+        
+        #startButton:hover {
+            background: #c0392b;
+        }
+        
+        #loadMapButton {
+            background: #3498db;
+        }
+        
+        #loadMapButton:hover {
+            background: #2980b9;
+        }
+        
+        #scoreDisplay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 20px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+        
+        #mapFileInput {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="800" height="400"></canvas>
+        <div id="scoreDisplay">分数: 0</div>
+        <div id="startScreen">
+            <h1>马里奥射击版</h1>
+            <p>使用方向键移动，空格键跳跃，Z键射击</p>
+            <button id="startButton">开始游戏</button>
+            <button id="loadMapButton">加载地图</button>
+            <input type="file" id="mapFileInput" accept=".json">
+        </div>
+    </div>
+
+    <script>
+        // 游戏变量
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const startScreen = document.getElementById('startScreen');
+        const startButton = document.getElementById('startButton');
+        const loadMapButton = document.getElementById('loadMapButton');
+        const mapFileInput = document.getElementById('mapFileInput');
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        
+        let score = 0;
+        let gameRunning = false;
+        let gameSpeed = 3;
+        
+        // 玩家角色
+        const player = {
+            x: 50,
+            y: 300,
+            width: 40,
+            height: 60,
+            speed: 5,
+            jumpForce: 12,
+            velocityY: 0,
+            isJumping: false,
+            direction: 'right',
+            frame: 0,
+            frameCount: 0,
+            shootCooldown: 0
+        };
+        
+        // 子弹数组
+        let bullets = [];
+        
+        // 敌人数组
+        let enemies = [];
+        
+        // 平台数组
+        let platforms = [
+            { x: 0, y: 360, width: 200, height: 40 },
+            { x: 250, y: 320, width: 150, height: 40 },
+            { x: 450, y: 280, width: 150, height: 40 },
+            { x: 650, y: 240, width: 150, height: 40 },
+            { x: 850, y: 200, width: 150, height: 40 },
+            { x: 1050, y: 160, width: 150, height: 40 },
+            { x: 1250, y: 360, width: 200, height: 40 },
+            { x: 1500, y: 360, width: 800, height: 40 }
+        ];
+        
+        // 云朵背景
+        const clouds = [];
+        for (let i = 0; i < 10; i++) {
+            clouds.push({
+                x: Math.random() * 2000,
+                y: Math.random() * 150,
+                width: 80 + Math.random() * 70,
+                speed: 0.5 + Math.random() * 1.5
+            });
+        }
+        
+        // 按键状态
+        const keys = {
+            ArrowLeft: false,
+            ArrowRight: false,
+            ArrowUp: false,
+            ' ': false,
+            z: false
+        };
+        
+        // 加载图像
+        function loadImage(src) {
+            const img = new Image();
+            img.src = src;
+            return img;
+        }
+        
+        // 游戏图像
+        const images = {
+            playerRight: loadImage('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0MCA2MCI+PHN0eWxlPnJlY3R7ZmlsbDojMDAwfS5oYWlye2ZpbGw6Izc1MDAwMH0uY2Fwe2ZpbGw6I2U3NGMzY30uZmVhdHVyZXN7ZmlsbDojZmZmfS5za2lue2ZpbGw6I2ZmY2M4Y30uc2hvZXtmaWxsOi44ODh9LmxlZ3tmaWxsOiMwMGN9LmJyb3due2ZpbGw6I2I1NzIyMn08L3N0eWxlPjxyZWN0IHg9IjUiIHk9IjEwIiB3aWR0aD0iMzAiIGhlaWdodD0iNTAiIGNsYXNzPSJicm93biIvPjxyZWN0IHg9IjUiIHk9IjEwIiB3aWR0aD0iMzAiIGhlaWdodD0iNSIgY2xhc3M9ImhhaXIiLz48cmVjdCB4PSIxMCIgeT0iNSIgd2lkdGg9IjIwIiBoZWlnaHQ9IjEwIiBjbGFzcz0iY2FwIi8+PHJlY3QgeD0iMTUiIHk9IjE1IiB3aWR0aD0iMTAiIGhlaWdodD0iNSIgY2xhc3M9ImZlYXR1cmVzIi8+PHJlY3QgeD0iMTAiIHk9IjIwIiB3aWR0aD0iNSIgaGVpZ2h0PSI1IiBjbGFzcz0ic2tpbnkiLz48cmVjdCB4PSI1IiB5PSI2MCIgd2lkdGg9IjEwIiBoZWlnaHQ9IjEwIiBjbGFzcz0ic2hvZSIvPjxyZWN0IHg9IjI1IiB5PSI2MCIgd2lkdGg9IjEwIiBoZWlnaHQ9IjEwIiBjbGFzcz0ic2hvZSIvPjxyZWN0IHg9IjUiIHk9IjUwIiB3aWR0aD0iMTAiIGhlaWdodD0iMTAiIGNsYXNzPSJsZWciLz48cmVjdCB4PSIyNSIgeT0iNTAiIHdpZHRoPSIxMCIgaGVpZ2h0PSIxMCIgY2xhc3M9ImxlZyIvPjwvc3ZnPg=='),
+            playerLeft: loadImage('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0MCA2MCI+PHN0eWxlPnJlY3R7ZmlsbDojMDAwfS5oYWlye2ZpbGw6Izc1MDAwMH0uY2Fwe2ZpbGw6I2U3NGMzY30uZmVhdHVyZXN7ZmlsbDojZmZmfS5za2lue2ZpbGw6I2ZmY2M4Y30uc2hvZXtmaWxsOi44ODh9LmxlZ3tmaWxsOiMwMGN9LmJyb3due2ZpbGw6I2I1NzIyMn08L3N0eWxlPjxyZWN0IHg9IjUiIHk9IjEwIiB3aWR0aD0iMzAiIGhlaWdodD0iNTAiIGNsYXNzPSJicm93biIvPjxyZWN0IHg9IjUiIHk9IjEwIiB3aWR0aD0iMzAiIGhlaWdodD0iNSIgY2xhc3M9ImhhaXIiLz48cmVjdCB4PSIxMCIgeT0iNSIgd2lkdGg9IjIwIiBoZWlnaHQ9IjEwIiBjbGFzcz0iY2FwIi8+PHJlY3QgeD0iMTUiIHk9IjE1IiB3aWR0aD0iMTAiIGhlaWdodD0iNSIgY2xhc3M9ImZlYXR1cmVzIi8+PHJlY3QgeD0iMjUiIHk9IjIwIiB3aWR0aD0iNSIgaGVpZ2h0PSI1IiBjbGFzcz0ic2tpbnkiLz48cmVjdCB4PSI1IiB5PSI2MCIgd2lkdGg9IjEwIiBoZWlnaHQ9IjEwIiBjbGFzcz0ic2hvZSIvPjxyZWN0IHg9IjI1IiB5PSI2MCIgd2lkdGg9IjEwIiBoZWlnaHQ9IjEwIiBjbGFzcz0ic2hvZSIvPjxyZWN0IHg9IjUiIHk9IjUwIiB3aWR0aD0iMTAiIGhlaWdodD0iMTAiIGNsYXNzPSJsZWciLz48cmVjdCB4PSIyNSIgeT0iNTAiIHdpZHRoPSIxMCIgaGVpZ2h0PSIxMCIgY2xhc3M9ImxlZyIvPjwvc3ZnPg=='),
+            bullet: loadImage('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMCAxMCI+PHN0eWxlPmNpcmNsZXtmaWxsOiNmZmMxMDd9PC9zdHlsZT48Y2lyY2xlIGN4PSI1IiBjeT0iNSIgcj0iNSIvPjwvc3ZnPg=='),
+            enemy: loadImage('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0MCA0MCI+PHN0eWxlPnJlY3R7ZmlsbDojMDAwfS5ib2R5e2ZpbGw6I2U3NGMzY30uZXllc3tmaWxsOiNmZmZ9Lm1vdXRoe2ZpbGw6I2ZmYzEwN308L3N0eWxlPjxyZWN0IHg9IjUiIHk9IjUiIHdpZHRoPSIzMCIgaGVpZ2h0PSIzMCIgY2xhc3M9ImJvZHkiLz48cmVjdCB4PSIxMCIgeT0iMTAiIHdpZHRoPSI1IiBoZWlnaHQ9IjUiIGNsYXNzPSJleWVzIi8+PHJlY3QgeD0iMjUiIHk9IjEwIiB3aWR0aD0iNSIgaGVpZ2h0PSI1IiBjbGFzcz0iZXllcyIvPjxyZWN0IHg9IjE1IiB5PSIyMCIgd2lkdGg9IjEwIiBoZWlnaHQ9IjUiIGNsYXNzPSJtb3V0aCIvPjwvc3ZnPg=='),
+            platform: loadImage('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgNDAiPjxzdHlsZT5yZWN0e2ZpbGw6IzVjYTMxNn0uc3Ryb2tle3N0cm9rZTojMDAwO3N0cm9rZS13aWR0aDoyfTwvc3R5bGU+PHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0PSI0MCIgY2xhc3M9InN0cm9rZSIvPjxyZWN0IHg9IjIiIHk9IjIiIHdpZHRoPSI5NiIgaGVpZ2h0PSIzNiIvPjwvc3ZnPg=='),
+            cloud: loadImage('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgNTAiPjxzdHlsZT5jaXJjbGV7ZmlsbDojZmZmfG9wYWNpdHk6Ljg7ZmlsdGVyOmJsdXIoMnB4KX08L3N0eWxlPjxjaXJjbGUgY3g9IjIwIiBjeT0iMjAiIHI9IjIwIi8+PGNpcmNsZSBjeD0iNDAiIGN5PSIyMCIgcj0iMjUiLz48Y2lyY2xlIGN4PSI3MCIgY3k9IjIwIiByPSIyMCIvPjxjaXJjbGUgY3g9IjUwIiBjeT0iMzAiIHI9IjE1Ii8+PGNpcmNsZSBjeD0iMzAiIGN5PSIzMCIgcj0iMTAiLz48L3N2Zz4=')
+        };
+        
+        // 键盘事件监听
+        window.addEventListener('keydown', (e) => {
+            if (keys.hasOwnProperty(e.key)) {
+                keys[e.key] = true;
+            }
+        });
+        
+        window.addEventListener('keyup', (e) => {
+            if (keys.hasOwnProperty(e.key)) {
+                keys[e.key] = false;
+            }
+        });
+        
+        // 开始游戏
+        startButton.addEventListener('click', () => {
+            startScreen.style.display = 'none';
+            gameRunning = true;
+            resetGame();
+            gameLoop();
+        });
+        
+        // 加载地图
+        loadMapButton.addEventListener('click', () => {
+            mapFileInput.click();
+        });
+        
+        mapFileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const mapData = JSON.parse(event.target.result);
+                    loadCustomMap(mapData);
+                    startScreen.style.display = 'none';
+                    gameRunning = true;
+                    resetGame();
+                    gameLoop();
+                } catch (error) {
+                    alert('地图文件格式错误: ' + error.message);
+                }
+            };
+            reader.readAsText(file);
+        });
+        
+        // 加载自定义地图
+        function loadCustomMap(mapData) {
+            // 重置游戏数据
+            platforms = [];
+            enemies = [];
+            
+            // 加载平台
+            if (mapData.platforms && Array.isArray(mapData.platforms)) {
+                platforms = mapData.platforms;
+            }
+            
+            // 加载敌人
+            if (mapData.enemies && Array.isArray(mapData.enemies)) {
+                enemies = mapData.enemies.map(enemy => ({
+                    x: enemy.x,
+                    y: enemy.y - 40, // 调整y坐标，因为敌人高度是40
+                    width: 40,
+                    height: 40,
+                    speed: 1 + Math.random() * 1,
+                    health: enemy.health || 2,
+                    direction: Math.random() > 0.5 ? 'left' : 'right'
+                }));
+            }
+        }
+        
+        // 重置游戏
+        function resetGame() {
+            player.x = 50;
+            player.y = 300;
+            player.velocityY = 0;
+            player.isJumping = false;
+            player.direction = 'right';
+            player.frame = 0;
+            player.frameCount = 0;
+            player.shootCooldown = 0;
+            
+            bullets = [];
+            score = 0;
+            scoreDisplay.textContent = `分数: ${score}`;
+            
+            // 如果没有敌人，生成一些默认敌人
+            if (enemies.length === 0) {
+                spawnEnemy(400, 320);
+                spawnEnemy(600, 280);
+                spawnEnemy(800, 240);
+                spawnEnemy(1000, 200);
+                spawnEnemy(1200, 160);
+            }
+        }
+        
+        // 生成敌人
+        function spawnEnemy(x, y) {
+            enemies.push({
+                x: x,
+                y: y - 40,
+                width: 40,
+                height: 40,
+                speed: 1 + Math.random() * 1,
+                health: 2,
+                direction: Math.random() > 0.5 ? 'left' : 'right'
+            });
+        }
+        
+        // 游戏主循环
+        function gameLoop() {
+            if (!gameRunning) return;
+            
+            update();
+            render();
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // 更新游戏状态
+        function update() {
+            // 更新玩家
+            updatePlayer();
+            
+            // 更新子弹
+            updateBullets();
+            
+            // 更新敌人
+            updateEnemies();
+            
+            // 生成新敌人
+            if (Math.random() < 0.005 && enemies.length < 10) {
+                spawnEnemy(player.x + canvas.width + 100, 360);
+            }
+            
+            // 更新射击冷却
+            if (player.shootCooldown > 0) {
+                player.shootCooldown--;
+            }
+        }
+        
+        // 更新玩家状态
+        function updatePlayer() {
+            // 水平移动
+            if (keys.ArrowLeft) {
+                player.x -= player.speed;
+                player.direction = 'left';
+                player.frameCount++;
+            } else if (keys.ArrowRight) {
+                player.x += player.speed;
+                player.direction = 'right';
+                player.frameCount++;
+            }
+            
+            // 动画帧
+            if (player.frameCount > 10) {
+                player.frame = (player.frame + 1) % 2;
+                player.frameCount = 0;
+            }
+            
+            // 跳跃
+            if ((keys.ArrowUp || keys[' ']) && !player.isJumping) {
+                player.velocityY = -player.jumpForce;
+                player.isJumping = true;
+            }
+            
+            // 射击
+            if (keys.z && player.shootCooldown === 0) {
+                shoot();
+                player.shootCooldown = 15;
+            }
+            
+            // 重力
+            player.velocityY += 0.5;
+            player.y += player.velocityY;
+            
+            // 平台碰撞检测
+            player.isJumping = true;
+            for (const platform of platforms) {
+                if (
+                    player.x + player.width > platform.x &&
+                    player.x < platform.x + platform.width &&
+                    player.y + player.height > platform.y &&
+                    player.y + player.height < platform.y + platform.height + player.velocityY
+                ) {
+                    player.y = platform.y - player.height;
+                    player.velocityY = 0;
+                    player.isJumping = false;
+                }
+            }
+            
+            // 边界检查
+            if (player.y > canvas.height) {
+                gameOver();
+            }
+            
+            // 确保玩家不会移出屏幕左侧
+            if (player.x < 0) {
+                player.x = 0;
+            }
+        }
+        
+        // 射击
+        function shoot() {
+            const bulletX = player.direction === 'right' ? 
+                player.x + player.width : 
+                player.x;
+            
+            bullets.push({
+                x: bulletX,
+                y: player.y + player.height / 2 - 5,
+                width: 10,
+                height: 10,
+                speed: player.direction === 'right' ? 10 : -10,
+                direction: player.direction
+            });
+        }
+        
+        // 更新子弹
+        function updateBullets() {
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const bullet = bullets[i];
+                bullet.x += bullet.speed;
+                
+                // 移除屏幕外的子弹
+                if (bullet.x < 0 || bullet.x > canvas.width) {
+                    bullets.splice(i, 1);
+                    continue;
+                }
+                
+                // 检测子弹与敌人的碰撞
+                for (let j = enemies.length - 1; j >= 0; j--) {
+                    const enemy = enemies[j];
+                    if (
+                        bullet.x + bullet.width > enemy.x &&
+                        bullet.x < enemy.x + enemy.width &&
+                        bullet.y + bullet.height > enemy.y &&
+                        bullet.y < enemy.y + enemy.height
+                    ) {
+                        enemy.health--;
+                        bullets.splice(i, 1);
+                        
+                        if (enemy.health <= 0) {
+                            enemies.splice(j, 1);
+                            score += 10;
+                            scoreDisplay.textContent = `分数: ${score}`;
+                        }
+                        
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // 更新敌人
+        function updateEnemies() {
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const enemy = enemies[i];
+                
+                // 敌人移动
+                if (enemy.direction === 'left') {
+                    enemy.x -= enemy.speed;
+                } else {
+                    enemy.x += enemy.speed;
+                }
+                
+                // 敌人AI - 简单追踪玩家
+                if (Math.abs(enemy.x - player.x) < 200) {
+                    enemy.direction = enemy.x > player.x ? 'left' : 'right';
+                }
+                
+                // 敌人边界检查
+                let onPlatform = false;
+                for (const platform of platforms) {
+                    if (
+                        enemy.x + enemy.width > platform.x &&
+                        enemy.x < platform.x + platform.width &&
+                        enemy.y + enemy.height > platform.y &&
+                        enemy.y + enemy.height < platform.y + platform.height + 1
+                    ) {
+                        onPlatform = true;
+                        
+                        // 防止敌人掉下平台
+                        if ((enemy.direction === 'left' && enemy.x <= platform.x) ||
+                            (enemy.direction === 'right' && enemy.x + enemy.width >= platform.x + platform.width)) {
+                            enemy.direction = enemy.direction === 'left' ? 'right' : 'left';
+                        }
+                    }
+                }
+                
+                // 重力
+                if (!onPlatform) {
+                    enemy.y += 3;
+                }
+                
+                // 检测敌人与玩家碰撞
+                if (
+                    player.x + player.width > enemy.x &&
+                    player.x < enemy.x + enemy.width &&
+                    player.y + player.height > enemy.y &&
+                    player.y < enemy.y + enemy.height
+                ) {
+                    gameOver();
+                }
+            }
+        }
+        
+        // 游戏结束
+        function gameOver() {
+            gameRunning = false;
+            startScreen.style.display = 'flex';
+            startScreen.querySelector('h1').textContent = '游戏结束';
+            startScreen.querySelector('p').textContent = `最终分数: ${score}`;
+            startButton.textContent = '再玩一次';
+        }
+        
+        // 渲染游戏
+        function render() {
+            // 清除画布
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // 绘制背景
+            drawBackground();
+            
+            // 绘制平台
+            drawPlatforms();
+            
+            // 绘制子弹
+            drawBullets();
+            
+            // 绘制敌人
+            drawEnemies();
+            
+            // 绘制玩家
+            drawPlayer();
+        }
+        
+        // 绘制背景
+        function drawBackground() {
+            // 天空渐变
+            const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            skyGradient.addColorStop(0, '#6b8cff');
+            skyGradient.addColorStop(1, '#87CEEB');
+            ctx.fillStyle = skyGradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // 绘制云朵
+            for (const cloud of clouds) {
+                ctx.drawImage(
+                    images.cloud,
+                    cloud.x - player.x * 0.2,
+                    cloud.y,
+                    cloud.width,
+                    cloud.width * 0.5
+                );
+                
+                // 云朵移动
+                cloud.x -= cloud.speed;
+                if (cloud.x + cloud.width < -100) {
+                    cloud.x = canvas.width + 100;
+                    cloud.y = Math.random() * 150;
+                }
+            }
+            
+            // 远处的山
+            ctx.fillStyle = '#4a6d2d';
+            for (let i = 0; i < 5; i++) {
+                const mountainX = (i * 400 - player.x * 0.1) % (canvas.width + 800) - 400;
+                ctx.beginPath();
+                ctx.moveTo(mountainX, canvas.height);
+                ctx.lineTo(mountainX + 200, canvas.height - 100);
+                ctx.lineTo(mountainX + 400, canvas.height);
+                ctx.fill();
+            }
+        }
+        
+        // 绘制平台
+        function drawPlatforms() {
+            for (const platform of platforms) {
+                // 只绘制屏幕内的平台
+                if (platform.x + platform.width > player.x - canvas.width / 2 && 
+                    platform.x < player.x + canvas.width * 1.5) {
+                    
+                    // 平台阴影
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+                    ctx.fillRect(
+                        platform.x - player.x + canvas.width / 2 - 2, 
+                        platform.y - player.y + canvas.height / 2 + 2, 
+                        platform.width, 
+                        platform.height
+                    );
+                    
+                    // 平台图像
+                    for (let x = 0; x < platform.width; x += 100) {
+                        const width = Math.min(100, platform.width - x);
+                        ctx.drawImage(
+                            images.platform,
+                            0, 0, width, 40,
+                            platform.x - player.x + canvas.width / 2 + x, 
+                            platform.y - player.y + canvas.height / 2, 
+                            width, 
+                            platform.height
+                        );
+                    }
+                }
+            }
+        }
+        
+        // 绘制子弹
+        function drawBullets() {
+            for (const bullet of bullets) {
+                ctx.drawImage(
+                    images.bullet,
+                    bullet.x - player.x + canvas.width / 2,
+                    bullet.y - player.y + canvas.height / 2,
+                    bullet.width,
+                    bullet.height
+                );
+            }
+        }
+        
+        // 绘制敌人
+        function drawEnemies() {
+            for (const enemy of enemies) {
+                // 敌人阴影
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+                ctx.fillRect(
+                    enemy.x - player.x + canvas.width / 2 - 2, 
+                    enemy.y - player.y + canvas.height / 2 + 2, 
+                    enemy.width, 
+                    enemy.height
+                );
+                
+                // 敌人图像
+                ctx.drawImage(
+                    images.enemy,
+                    enemy.x - player.x + canvas.width / 2,
+                    enemy.y - player.y + canvas.height / 2,
+                    enemy.width,
+                    enemy.height
+                );
+            }
+        }
+        
+        // 绘制玩家
+        function drawPlayer() {
+            // 玩家阴影
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+            ctx.fillRect(
+                canvas.width / 2 - 2, 
+                canvas.height / 2 + 2, 
+                player.width, 
+                player.height
+            );
+            
+            // 玩家图像
+            const playerImage = player.direction === 'right' ? 
+                images.playerRight : 
+                images.playerLeft;
+            
+            ctx.drawImage(
+                playerImage,
+                canvas.width / 2,
+                canvas.height / 2,
+                player.width,
+                player.height
+            );
+        }
+    </script>
+</body>
+</html>
